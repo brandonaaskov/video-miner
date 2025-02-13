@@ -7,6 +7,7 @@ import whisper
 from pathlib import Path
 import logging
 import argparse
+import json
 
 # Set up logging
 logging.basicConfig(
@@ -19,16 +20,82 @@ logger = logging.getLogger(__name__)
 class VideoProcessor:
     def __init__(self, base_dir: Path):
         self.base_dir = Path(base_dir)
-        self.video_dir = self.base_dir / 'video'
         self.audio_dir = self.base_dir / 'audio'
         self.frames_dir = self.base_dir / 'frames'
         self.transcripts_dir = self.base_dir / 'transcripts'
+        self.captions_dir = self.base_dir / 'captions'
         self.supported_formats = {'.mp4', '.mov', '.avi', '.mkv', '.ts', '.m2ts'}
         
         # Create output directories
-        for directory in [self.video_dir, self.audio_dir, self.frames_dir, self.transcripts_dir]:
+        for directory in [self.audio_dir, self.frames_dir, self.transcripts_dir, self.captions_dir]:
             directory.mkdir(exist_ok=True)
             logger.info(f"Created/verified directory: {directory}")
+
+    def extract_captions(self, video_path: Path) -> bool:
+        """Extract closed captions from video file."""
+        try:
+            filename = video_path.stem
+            srt_output = self.captions_dir / f"{filename}.srt"
+            
+            # First, check for subtitle streams
+            probe_cmd = [
+                'ffprobe',
+                '-v', 'error',
+                '-select_streams', 's',
+                '-show_entries', 'stream=index:stream_tags=language,title',
+                '-of', 'json',
+                str(video_path)
+            ]
+            
+            probe_result = subprocess.run(probe_cmd, capture_output=True, text=True)
+            streams_info = json.loads(probe_result.stdout)
+            
+            if 'streams' in streams_info and streams_info['streams']:
+                # Process each subtitle stream
+                for stream in streams_info['streams']:
+                    stream_index = stream['index']
+                    lang = stream.get('tags', {}).get('language', 'und')
+                    
+                    # Prioritize English subtitles
+                    if lang in ['eng', 'en']:
+                        output_file = self.captions_dir / f"{filename}_eng.srt"
+                        
+                        extract_cmd = [
+                            'ffmpeg', '-y',
+                            '-i', str(video_path),
+                            '-map', f'0:{stream_index}',
+                            str(output_file)
+                        ]
+                        
+                        subprocess.run(extract_cmd, capture_output=True)
+                        logger.info(f"Extracted English captions from {video_path.name}")
+                        return True
+            
+            # If no English subtitles found, try extracting CEA-608/708 captions
+            cea_output = self.captions_dir / f"{filename}_cea608.srt"
+            cea_cmd = [
+                'ffmpeg', '-y',
+                '-i', str(video_path),
+                '-map', '0:c:s',
+                '-c:s', 'srt',
+                str(cea_output)
+            ]
+            
+            subprocess.run(cea_cmd, capture_output=True)
+            
+            # Check if the output file has content
+            if cea_output.exists() and cea_output.stat().st_size > 100:
+                logger.info(f"Extracted CEA-608/708 captions from {video_path.name}")
+                return True
+            else:
+                if cea_output.exists():
+                    cea_output.unlink()  # Remove empty file
+                logger.info(f"No captions found in {video_path.name}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Error extracting captions: {str(e)}")
+            return False
 
     def extract_audio(self, video_path: Path) -> Path:
         """Extract audio from video file."""
@@ -126,31 +193,36 @@ class VideoProcessor:
             return False
 
     def process_videos(self):
-        """Process all videos in the video directory."""
-        if not self.video_dir.exists():
-            logger.error("Video directory not found")
+        """Process all videos in the provided directory."""
+        if not self.base_dir.exists():
+            logger.error("Provided directory not found")
             return
 
-        # Get all video files
+        # Get all video files directly from the base directory
         video_files = [
-            f for f in self.video_dir.iterdir()
-            if f.suffix.lower() in self.supported_formats
+            f for f in self.base_dir.iterdir()
+            if f.is_file() and f.suffix.lower() in self.supported_formats
         ]
 
         if not video_files:
-            logger.info("No video files found in the video directory")
+            logger.info("No video files found in the provided directory")
             return
 
         stats = {
             'processed': 0,
             'audio_extracted': 0,
             'frames_extracted': 0,
-            'transcribed': 0
+            'transcribed': 0,
+            'captions_extracted': 0
         }
 
         for video_path in video_files:
             logger.info(f"\nProcessing {video_path.name}...")
             stats['processed'] += 1
+
+            # Extract captions
+            if self.extract_captions(video_path):
+                stats['captions_extracted'] += 1
 
             # Extract audio
             audio_path = self.extract_audio(video_path)
@@ -171,10 +243,11 @@ class VideoProcessor:
         logger.info(f"Successfully extracted audio from {stats['audio_extracted']} videos")
         logger.info(f"Successfully extracted frames from {stats['frames_extracted']} videos")
         logger.info(f"Successfully transcribed {stats['transcribed']} videos")
+        logger.info(f"Successfully extracted captions from {stats['captions_extracted']} videos")
 
 def main():
     parser = argparse.ArgumentParser(description='Process videos for frame extraction and transcription')
-    parser.add_argument('directory', type=str, help='Base directory containing the video folder')
+    parser.add_argument('directory', type=str, help='Directory containing video files')
     args = parser.parse_args()
 
     try:

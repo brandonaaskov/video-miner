@@ -17,8 +17,5 @@ fi
 # Convert to absolute path
 ABSOLUTE_PATH=$(realpath "$1")
 
-# Create video subdirectory if it doesn't exist
-mkdir -p "$ABSOLUTE_PATH/video"
-
 # Run the docker container with auto-removal
 docker run --rm $GPU_FLAG -v "$ABSOLUTE_PATH:/data" video-miner /data
