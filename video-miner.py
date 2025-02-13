@@ -6,6 +6,7 @@ import subprocess
 import whisper
 from pathlib import Path
 import logging
+import argparse
 
 # Set up logging
 logging.basicConfig(
@@ -16,16 +17,18 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class VideoProcessor:
-    def __init__(self):
-        self.video_dir = Path('video')
-        self.audio_dir = Path('audio')
-        self.frames_dir = Path('frames')
-        self.transcripts_dir = Path('transcripts')
+    def __init__(self, base_dir: Path):
+        self.base_dir = Path(base_dir)
+        self.video_dir = self.base_dir / 'video'
+        self.audio_dir = self.base_dir / 'audio'
+        self.frames_dir = self.base_dir / 'frames'
+        self.transcripts_dir = self.base_dir / 'transcripts'
         self.supported_formats = {'.mp4', '.mov', '.avi', '.mkv', '.ts', '.m2ts'}
         
         # Create output directories
-        for directory in [self.audio_dir, self.frames_dir, self.transcripts_dir]:
+        for directory in [self.video_dir, self.audio_dir, self.frames_dir, self.transcripts_dir]:
             directory.mkdir(exist_ok=True)
+            logger.info(f"Created/verified directory: {directory}")
 
     def extract_audio(self, video_path: Path) -> Path:
         """Extract audio from video file."""
@@ -170,8 +173,12 @@ class VideoProcessor:
         logger.info(f"Successfully transcribed {stats['transcribed']} videos")
 
 def main():
+    parser = argparse.ArgumentParser(description='Process videos for frame extraction and transcription')
+    parser.add_argument('directory', type=str, help='Base directory containing the video folder')
+    args = parser.parse_args()
+
     try:
-        processor = VideoProcessor()
+        processor = VideoProcessor(args.directory)
         processor.process_videos()
     except KeyboardInterrupt:
         logger.info("\nProcess interrupted by user")
