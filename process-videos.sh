@@ -18,4 +18,4 @@ fi
 ABSOLUTE_PATH=$(realpath "$1")
 
 # Run the docker container with auto-removal
-docker run --rm $GPU_FLAG -v "$ABSOLUTE_PATH:/data" video-miner /data
+docker run --rm $GPU_FLAG -v "$ABSOLUTE_PATH:/videos" brandonaaskov/video-miner
