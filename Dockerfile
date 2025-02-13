@@ -11,9 +11,6 @@ RUN apt-get update && apt-get install -y \
 RUN pip3 install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
 RUN pip3 install --no-cache-dir openai-whisper
 
-# Set the working directory - this is where videos will be expected
-WORKDIR /videos
-
 # Copy the script
 COPY video-miner.py .
 
