@@ -1,0 +1,14 @@
+/audio/*
+!audio/.gitkeep
+
+/captions/*
+!captions/.gitkeep
+
+/frames/*
+!frames/.gitkeep
+
+/transcripts/*
+!transcripts/.gitkeep
+
+/video/*
+!video/.gitkeep
