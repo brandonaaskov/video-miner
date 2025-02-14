@@ -9,7 +9,7 @@ You provide a directory of videos, and inside this script will create:
 - /transcripts: the audio file transcribed
 
 ```
-docker build -t video-miner .
+docker image pull brandonaaskov/video-miner:latest
 ./process-videos.sh /path/to/your/videos/folder/
 ```
 
